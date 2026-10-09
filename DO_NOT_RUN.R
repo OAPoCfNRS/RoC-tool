@@ -146,19 +146,19 @@ label_lookup <- function(label_tbl, variable, field = "title") {
 
 # ---- Read settings ----------------------------------------------------
 
-read_config <- function(path = "settings_configuration_v5.xlsx") {
+read_config <- function(path = "settings_configuration.xlsx") {
   if (!file.exists(path)) stop("Settings file not found: ", normalizePath(path, mustWork = FALSE))
 
   project <- read_kv_sheet(path, "Project")
   bio <- read_kv_sheet(path, "Bio_settings")
   seg <- read_kv_sheet(path, "Bio_segmentation")
-  chem <- read_kv_sheet(path, "Chem_settings")
+  chem <- read_kv_sheet(path, "Abio_settings")
 
   project$project_dir <- norm_path(project$project_dir %||% ".")
   project$data_dir <- norm_path(project$data_dir %||% "data", project$project_dir)
   project$out_dir <- norm_path(project$out_dir %||% "out", project$project_dir)
   project$run_bio <- parse_bool(project$run_bio %||% TRUE)
-  project$run_chem <- parse_bool(project$run_chem %||% TRUE)
+  project$run_abio <- parse_bool(project$run_abio %||% TRUE)
   project$overwrite_outputs <- parse_bool(project$overwrite_outputs %||% TRUE)
   project$log_runs <- parse_bool(project$log_runs %||% TRUE)
 
@@ -175,24 +175,22 @@ read_config <- function(path = "settings_configuration_v5.xlsx") {
   seg$min_segment_years <- as.integer(seg$min_segment_years %||% 3)
   seg$max_segments <- as.integer(seg$max_segments %||% 2)
   if (seg$max_segments > 2) stop("Bio_segmentation$max_segments must be 1 or 2 in this pipeline.")
-  seg$penalty_multiplier <- suppressWarnings(as.numeric(seg$penalty_multiplier))
-  if (!is.finite(seg$penalty_multiplier)) seg$penalty_multiplier <- NA_real_
   seg$min_r2_gain <- as.numeric(seg$min_r2_gain %||% 0.05)
   seg$boundary_fraction <- as.numeric(seg$boundary_fraction %||% 0.15)
-  seg$selection_method <- tolower(trimws(as.character(seg$selection_method %||% "heuristic")))
-  if (!seg$selection_method %in% c("heuristic", "bic")) {
-    stop("Bio_segmentation$selection_method must be one of: heuristic, bic")
+  seg$selection_method <- tolower(trimws(as.character(seg$selection_method %||% "bic")))
+  if (seg$selection_method != "bic") {
+    stop("Bio_segmentation$selection_method must be bic")
   }
   seg$bic_count_breakpoint <- parse_bool(seg$bic_count_breakpoint %||% TRUE)
   seg$apply_min_r2_gain_filter <- parse_bool(seg$apply_min_r2_gain_filter %||% TRUE)
 
-  chem$analysis_years <- parse_year_span(chem$analysis_years, "Chem_settings$analysis_years")
+  chem$analysis_years <- parse_year_span(chem$analysis_years, "Abio_settings$analysis_years")
   chem$min_months_for_trend <- as.integer(chem$min_months_for_trend %||% 24)
   chem$tdt_min_months <- as.integer(chem$tdt_min_months %||% 60)
 
-  chem_vars <- readxl::read_excel(path, sheet = "Chem_selected_variables", .name_repair = "minimal")
+  chem_vars <- readxl::read_excel(path, sheet = "Abio_selected_variables", .name_repair = "minimal")
   if (!all(c("enabled", "variable") %in% names(chem_vars))) {
-    stop("Chem_selected_variables must contain at least: enabled, variable")
+    stop("Abio_selected_variables must contain at least: enabled, variable")
   }
   if (!"title" %in% names(chem_vars)) chem_vars$title <- NA_character_
   if (!"ylab" %in% names(chem_vars)) chem_vars$ylab <- NA_character_
@@ -207,8 +205,8 @@ read_config <- function(path = "settings_configuration_v5.xlsx") {
     dplyr::filter(enabled, !is.na(variable), nzchar(variable)) |>
     dplyr::distinct(variable, .keep_all = TRUE)
 
-  if (project$run_chem && !nrow(chem_vars)) {
-    stop("No enabled variables in Chem_selected_variables.")
+  if (project$run_abio && !nrow(chem_vars)) {
+    stop("No enabled variables in Abio_selected_variables.")
   }
 
   list(
@@ -217,7 +215,7 @@ read_config <- function(path = "settings_configuration_v5.xlsx") {
     seg = seg,
     chem = chem,
     colmap_bio = read_colmap(path, "Bio_ColMap"),
-    colmap_chem = read_colmap(path, "Chem_ColMap"),
+    colmap_chem = read_colmap(path, "Abio_ColMap"),
     chem_vars = chem_vars
   )
 }
@@ -268,8 +266,7 @@ single_segment_output <- function(x, y, reason = "single_line") {
     bic_single = NA_real_,
     bic_two = NA_real_,
     bic_delta = NA_real_,
-    r2_gain = NA_real_,
-    penalty = NA_real_
+    r2_gain = NA_real_
   )
 }
 
@@ -313,22 +310,16 @@ segment_one_series <- function(df, seg_cfg) {
     return(one)
   }
 
-  sigma2 <- one$sse / max(n - 2, 1)
-  penalty <- sigma2 * log(n)
-  if (is.finite(seg_cfg$penalty_multiplier)) penalty <- penalty * seg_cfg$penalty_multiplier
-
   best <- NULL
   for (k in candidate_idx) {
     s1 <- fit_line_stats(x[1:k], y[1:k])
     s2 <- fit_line_stats(x[(k + 1):n], y[(k + 1):n])
     sse2 <- s1$sse + s2$sse
-    cost2 <- sse2 + penalty
 
-    # The optimal candidate breakpoint is the one minimizing within-segment SSE.
-    # The heuristic penalty and BIC parameter penalty are constant across candidate
-    # breakpoints for a given series, so this choice is valid for both methods.
+    # Select the breakpoint minimising the combined SSE.
+    # The BIC parameter penalty is constant across candidate breakpoints.
     if (is.null(best) || sse2 < best$sse2) {
-      best <- list(k = k, s1 = s1, s2 = s2, sse2 = sse2, cost2 = cost2)
+      best <- list(k = k, s1 = s1, s2 = s2, sse2 = sse2)
     }
   }
 
@@ -337,8 +328,6 @@ segment_one_series <- function(df, seg_cfg) {
     return(one)
   }
 
-  cost1 <- one$sse
-  cost2 <- best$cost2
 
   bic_k_single <- 2
   bic_k_two <- if (isTRUE(seg_cfg$bic_count_breakpoint)) 5 else 4
@@ -356,34 +345,18 @@ segment_one_series <- function(df, seg_cfg) {
   }
   r2_gain <- adj_r2_two - one$adj_r2
 
-  if (seg_cfg$selection_method == "bic") {
-    one$selection_method <- "bic"
-    one$selection_score_single <- bic_single
-    one$selection_score_two <- bic_two
-    one$bic_single <- bic_single
-    one$bic_two <- bic_two
-    one$bic_delta <- bic_delta
-    one$r2_gain <- r2_gain
-    one$penalty <- NA_real_
-
-    if (!is.finite(bic_single) || !is.finite(bic_two) || bic_two >= bic_single) {
-      one$segmentation_reason <- "bic_not_improved"
-      return(one)
-    }
-  } else {
-    one$selection_method <- "heuristic"
-    one$selection_score_single <- cost1
-    one$selection_score_two <- cost2
-    one$bic_single <- bic_single
-    one$bic_two <- bic_two
-    one$bic_delta <- bic_delta
-    one$r2_gain <- r2_gain
-    one$penalty <- penalty
-
-    if (!is.finite(cost2) || cost2 >= cost1) {
-      one$segmentation_reason <- "penalized_cost_not_improved"
-      return(one)
-    }
+  one$selection_method <- "bic"
+  one$selection_score_single <- bic_single
+  one$selection_score_two <- bic_two
+  one$bic_single <- bic_single
+  one$bic_two <- bic_two
+  one$bic_delta <- bic_delta
+  one$r2_gain <- r2_gain
+  
+  if (!is.finite(bic_single) || !is.finite(bic_two) ||
+      bic_two >= bic_single) {
+    one$segmentation_reason <- "bic_not_improved"
+    return(one)
   }
 
   if (isTRUE(seg_cfg$apply_min_r2_gain_filter) &&
@@ -429,14 +402,13 @@ segment_one_series <- function(df, seg_cfg) {
       breakpoint_year = bp,
       segmentation_accepted = TRUE,
       segmentation_reason = "two_segment_accepted",
-      selection_method = seg_cfg$selection_method,
-      selection_score_single = if (seg_cfg$selection_method == "bic") bic_single else cost1,
-      selection_score_two = if (seg_cfg$selection_method == "bic") bic_two else cost2,
+      selection_method = "bic",
+      selection_score_single = bic_single,
+      selection_score_two = bic_two,
       bic_single = bic_single,
       bic_two = bic_two,
       bic_delta = bic_delta,
-      r2_gain = r2_gain,
-      penalty = if (seg_cfg$selection_method == "bic") NA_real_ else penalty
+      r2_gain = r2_gain
     )
 }
 
@@ -903,18 +875,18 @@ fit_best_chem_curve <- function(d, min_n = 6, n_grid = 200) {
 }
 
 run_chem_pipeline <- function(cfg) {
-  infile <- file.path(cfg$project$data_dir, cfg$project$chem_infile)
+  infile <- file.path(cfg$project$data_dir, cfg$project$abio_infile)
   if (!file.exists(infile)) stop("CHEM input file not found: ", infile)
 
   raw <- readxl::read_excel(infile, col_types = "text") |>
-    apply_colmap(cfg$colmap_chem, "Chem_ColMap")
+    apply_colmap(cfg$colmap_chem, "Abio_ColMap")
 
   check_required(raw, c("date", "grid_id"), "CHEM data")
 
   selected <- cfg$chem_vars$variable
   missing_vars <- setdiff(selected, names(raw))
   if (length(missing_vars)) {
-    stop("These enabled Chem_selected_variables were not found in CHEM data after Chem_ColMap: ",
+    stop("These enabled Abio_selected_variables were not found in CHEM data after Abio_ColMap: ",
          paste(missing_vars, collapse = ", "))
   }
 
@@ -1220,11 +1192,11 @@ run_pipeline <- function(settings_file) {
     message("BIO pipeline skipped: Project$run_bio = FALSE")
   }
 
-  if (cfg$project$run_chem) {
+  if (cfg$project$run_abio) {
     message("Running CHEM pipeline...")
     chem_out <- run_chem_pipeline(cfg)
   } else {
-    message("CHEM pipeline skipped: Project$run_chem = FALSE")
+    message("CHEM pipeline skipped: Project$run_abio = FALSE")
   }
 
   if (!is.null(bio_out) && !is.null(chem_out)) {

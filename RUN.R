@@ -26,8 +26,8 @@ project_dir <- dirname(get_script_path())
 setwd(project_dir)
 message("Working directory: ", getwd())
 
-settings_file <- "settings_configuration_v5.xlsx"
-pipeline_file <- "ROC_v5_DO_NOT_RUN.R"
+settings_file <- "settings_configuration.xlsx"
+pipeline_file <- "DO_NOT_RUN.R"
 
 if (!file.exists(settings_file)) stop(settings_file, " not found in: ", getwd())
 if (!file.exists(pipeline_file)) stop(pipeline_file, " not found in: ", getwd())
