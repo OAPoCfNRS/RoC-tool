@@ -115,7 +115,7 @@ parse_mixed_date <- function(x) {
   if (any(idx_chr)) {
     parsed <- suppressWarnings(lubridate::parse_date_time(
       x_chr[idx_chr],
-      orders = c("ymd", "dmy", "mdy", "Ymd", "dmY", "mdY")
+      orders = c("ymd HMS","dmy HMS","mdy HMS","ymd HM","dmy HM","mdy HM","ymd", "dmy", "mdy", "Ymd", "dmY", "mdY")
     ))
     out[idx_chr] <- as.Date(parsed)
   }
@@ -126,8 +126,8 @@ parse_mixed_date <- function(x) {
 decimal_year <- function(d) {
   d <- as.Date(d)
   y <- lubridate::year(d)
-  y0 <- as.Date(paste0(y, "-01-01"))
-  y1 <- as.Date(paste0(y + 1L, "-01-01"))
+  y0 <- as.Date(paste0(y, "-01-01"),format = "%Y-%m-%d")
+  y1 <- as.Date(paste0(y + 1L, "-01-01"),format = "%Y-%m-%d")
   y + as.numeric(d - y0) / as.numeric(y1 - y0)
 }
 
