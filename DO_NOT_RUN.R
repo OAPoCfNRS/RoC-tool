@@ -934,12 +934,12 @@ run_chem_pipeline <- function(cfg) {
 
   if (!nrow(chem_rates)) stop("CHEM: no rates produced.")
 
-  out_dir <- file.path(cfg$project$out_dir, "chem")
+  out_dir <- file.path(cfg$project$out_dir, "abio")
   dir.create(out_dir, recursive = TRUE, showWarnings = FALSE)
 
-  writexl::write_xlsx(chem_deseasoned, file.path(out_dir, "chem_deseasoned_observations.xlsx"))
-  writexl::write_xlsx(chem_monthly, file.path(out_dir, "chem_deseasoned_monthly.xlsx"))
-  writexl::write_xlsx(chem_rates, file.path(out_dir, "chem_full_window_rates.xlsx"))
+  writexl::write_xlsx(chem_deseasoned, file.path(out_dir, "abio_deseasoned_observations.xlsx"))
+  writexl::write_xlsx(chem_monthly, file.path(out_dir, "abio_deseasoned_monthly.xlsx"))
+  writexl::write_xlsx(chem_rates, file.path(out_dir, "abio_full_window_rates.xlsx"))
 
   label_titles <- setNames(
     vapply(selected, function(v) label_lookup(cfg$chem_vars, v, "title"), character(1)),
@@ -1074,15 +1074,15 @@ run_chem_pipeline <- function(cfg) {
       )+
       ggplot2::theme_bw() +
       ggplot2::labs(
-        title = paste0("CHEM deseasoning and full-window trends: ", gid),
-        subtitle = "Dashed curve is diagnostic only; solid linear trend is used for CHEM rate calculation.",
+        title = paste0("Abiotic deseasonalization and full-window trends: ", gid),
+        subtitle = "Dashed curve is diagnostic only; solid linear trend is used for abiotic rate calculation.",
         x = "Year",
         y = "Value",
         colour = "Series"
       )
 
     ggplot2::ggsave(
-      file.path(out_dir, paste0("chem_trends_", safe_slug(gid), ".png")),
+      file.path(out_dir, paste0("abio_trends_", safe_slug(gid), ".png")),
       p, width = 14, height = 9, dpi = 300
     )
   }
@@ -1095,7 +1095,7 @@ run_chem_pipeline <- function(cfg) {
   }
 
   if (nrow(chem_best_fit_curves)) {
-    writexl::write_xlsx(chem_best_fit_curves, file.path(out_dir, "chem_best_fit_diagnostic_curves.xlsx"))
+    writexl::write_xlsx(chem_best_fit_curves, file.path(out_dir, "abio_best_fit_diagnostic_curves.xlsx"))
   }
 
   list(deseasoned = chem_deseasoned, monthly = chem_monthly, rates = chem_rates)
@@ -1128,13 +1128,13 @@ pair_bio_chem <- function(cfg, bio_out, chem_out) {
     dplyr::inner_join(chem |> dplyr::filter(grid_id %in% common), by = "grid_id",relationship = "many-to-many") |>
     dplyr::arrange(point_id, chem_var) |>
     dplyr::mutate(
-      pair_note = "point_id identifies one unique BIO group-segment; the same point_id is repeated across CHEM variables. CHEM is full-window and not segmented.",
+      pair_note = "point_id identifies one unique BIO group-segment; the same point_id is repeated across ABIO variables. CHEM is full-window and not segmented.",
       .after = point_id
     )
 
-  out_dir <- file.path(cfg$project$out_dir, "bio_chem")
+  out_dir <- file.path(cfg$project$out_dir, "bio_abio")
   dir.create(out_dir, recursive = TRUE, showWarnings = FALSE)
-  writexl::write_xlsx(paired, file.path(out_dir, "bio_chem_rate_comparison.xlsx"))
+  writexl::write_xlsx(paired, file.path(out_dir, "bio_abio_rate_comparison.xlsx"))
 
   chem_titles <- paired |>
     dplyr::distinct(chem_var, chem_title)
@@ -1163,14 +1163,14 @@ pair_bio_chem <- function(cfg, bio_out, chem_out) {
     ggplot2::facet_wrap(~ chem_var, scales = "free_x", labeller = ggplot2::as_labeller(title_map)) +
     ggplot2::theme_bw() +
     ggplot2::labs(
-      title = "BIO segment rates vs full-window CHEM rates",
-      subtitle = "Same point_id = same BIO group-segment across all CHEM facets.",
-      x = "CHEM rate, native units per year",
-      y = "BIO rate, % of boundary maximum per year",
-      colour = "BIO segment length\n(years)"
+      title = "Biological segment rates vs full-window abiotic rates",
+      subtitle = "Same point_id = same biological group-segment across all abiotic panels",
+      x = "Abiotic rate, native units per year",
+      y = "Biotic rate, % of boundary maximum per year",
+      colour = "Biotic segment length\n(years)"
     )
 
-  ggplot2::ggsave(file.path(out_dir, "bio_chem_rate_comparison.png"), p, width = 14, height = 9, dpi = 300)
+  ggplot2::ggsave(file.path(out_dir, "bio_abio_rate_comparison.png"), p, width = 14, height = 9, dpi = 300)
 
   paired
 }
