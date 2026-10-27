@@ -62,13 +62,16 @@ The current version implementation retains `BIO` and `CHEM` in worksheet names, 
 
 ## Repository contents
 
-| File | Purpose | User action |
+| File or folder | Purpose | User action |
 |---|---|---|
-| `ROC_v5_RUN.R` | Launcher that locates the project folder, checks that required files exist, and starts the analysis | Open and run this file |
-| `ROC_v5_DO_NOT_RUN.R` | Analytical engine containing configuration parsing, data processing, models, plots, and exports | Do not edit or run directly during normal use |
-| `settings_configuration_v5.xlsx` | User interface for file paths, column mappings, variables, thresholds, and analysis choices | Edit the yellow value cells; retain sheet names and required keys |
+| `RUN.R` | Launcher that starts the workflow | Open and run this file |
+| `DO_NOT_RUN.R` | Analytical engine for data processing, models, plots and exports | Do not run directly during normal use |
+| `settings_configuration.xlsx` | Configuration workbook for input files, column mappings, analysis periods and analytical settings | Edit the designated value cells; retain worksheet names and required keys |
+| `data/biotic_data_example.xlsx` | Example biological time series | Use for the demonstration run |
+| `data/abiotic_data_example.xlsx` | Example abiotic time series | Use for the demonstration run |
+| `STEP BY STEP GUIDE for RoC tool.pdf` | Methodological guidance, demonstration-data description and practical instructions | Read before preparing data and interpreting results |
 
-Input data are not included in the repository. The filenames currently shown in the settings workbook are examples and must be replaced with the user's own filenames.
+Example input data are included in the `data/` folder. They can be used to practise configuring the workflow, running the analysis and interpreting the outputs before applying RoC to another dataset.
 
 ## Requirements
 
@@ -91,6 +94,30 @@ Keep the launcher, analytical engine, and settings workbook together in the proj
 RoC reads Excel workbooks. For each input workbook, the first worksheet is read. Prepare one biotic workbook, one abiotic workbook, or both, depending on the selected modules.
 
 Data quality control must be completed before running RoC. The tool does not detect analytical outliers, harmonize taxonomic names, standardize units, identify duplicated sampling events, or decide whether a missing biological record means absence.
+
+### Demonstration dataset
+
+The supplied example workbooks contain time series derived from Copernicus Marine Service reanalysis products for nine surface sites across the Iberian–Biscay–Irish, Baltic Sea and Mediterranean Sea regions. The source data are daily surface fields extracted at approximately 0.5–2 m depth.
+
+The biological example represents net primary production (`nppv`), used as a proxy for phytoplankton primary production. Abiotic variables include temperature, salinity, pH, pCO₂ and additional carbonate-system variables calculated during data preparation.
+
+These are reanalysis-derived demonstration data, not direct field observations. Additional carbonate variables were calculated using the R package `seacarb` from pH, pCO₂, temperature and salinity. They must be distinguished from directly measured quantities. Scientific use requires evaluation of the source products, pH scale, calculation settings and uncertainties.
+
+The step-by-step guide describes the source products, demonstration sites and carbonate calculations under “Preparing input files” and “Demonstration dataset”, including Tables 3 and 4.
+
+To run the supplied examples, set the following values in the `Project` worksheet of `settings_configuration.xlsx`:
+
+| Key | Value |
+|---|---|
+| `data_dir` | `data` |
+| `bio_infile` | `biotic_data_example.xlsx` |
+| `abio_infile` | `abiotic_data_example.xlsx` |
+| `run_bio` | `TRUE` |
+| `run_abio` | `TRUE` |
+
+Check the column mappings, selected variables and analysis periods before running `RUN.R`. Save a copy of the settings and outputs before changing settings and rerunning.
+
+When using your own data, replace the input filenames and review all relevant settings. Follow the guide’s data-preparation and quality-control procedures before analysis.
 
 ### Biological input
 
@@ -115,7 +142,7 @@ The abiotic table must contain:
 |---|---:|---|
 | `date` | Yes | Full sampling date |
 | `grid_id` | Yes | Site identifier; values must match the biological `grid_id` values for rate pairing |
-| Selected variables | Yes | Numeric carbonate chemistry or other physicochemical variables listed as enabled in `Chem_selected_variables` |
+| Selected variables | Yes | Numeric carbonate chemistry or other physicochemical variables listed as enabled in `Abio_selected_variables` |
 
 The optional input columns `year`, `month`, and `day` are not required. RoC derives them from `date` after import.
 
@@ -140,7 +167,7 @@ As a general case-study screening rule, an overlap of at least 15 years and no m
 
 ## Configure the analysis
 
-Open `settings_configuration_v5.xlsx` and edit values without renaming worksheets, deleting required keys, or changing the operated column names expected by the workflow.
+Open `settings_configuration.xlsx` and edit values without renaming worksheets, deleting required keys, or changing the operated column names expected by the workflow.
 
 ### `Project`
 
@@ -150,9 +177,9 @@ Open `settings_configuration_v5.xlsx` and edit values without renaming worksheet
 | `data_dir` | Input-data folder, resolved relative to `project_dir` unless an absolute path is supplied |
 | `out_dir` | Main results folder |
 | `bio_infile` | Biological workbook filename inside `data_dir` |
-| `chem_infile` | Abiotic workbook filename inside `data_dir` |
+| `abio_infile` | Abiotic workbook filename inside `data_dir` |
 | `run_bio` | Run or skip the biological module |
-| `run_chem` | Run or skip the abiotic module |
+| `run_abio` | Run or skip the abiotic module |
 | `overwrite_outputs` | Reserved setting; the current version reads this value but does not enforce it. Existing files with the same names are overwritten |
 | `log_runs` | Append a completion timestamp to `run.log` |
 
@@ -189,11 +216,11 @@ Use `complete_missing_groups_as_zero` only when absence can be inferred from the
 
 The default workbook uses BIC with the breakpoint counted as a parameter and an additional ecological filter based on adjusted-R² gain.
 
-### `Chem_ColMap`
+### `Abio_ColMap`
 
-Map only structural columns, particularly the sampling date and site identifier. Abiotic variables do not need to be listed here. The names entered on `Chem_selected_variables` must match their names after any column mapping has been applied.
+Map only structural columns, particularly the sampling date and site identifier. Abiotic variables do not need to be listed here. The names entered on `Abio_selected_variables` must match their names after any column mapping has been applied.
 
-### `Chem_selected_variables`
+### `Abio_selected_variables`
 
 Add any carbonate chemistry or other physicochemical variable to this table and set `enabled` to true to analyse it. No fixed set of ocean-acidification variables is required.
 
@@ -205,7 +232,7 @@ Add any carbonate chemistry or other physicochemical variable to this table and 
 | `ylab` | Optional axis label; include units where appropriate |
 | `description` | User note; not used by the analytical engine |
 
-### `Chem_settings`
+### `Abio_settings`
 
 | Key | Meaning |
 |---|---|
@@ -218,10 +245,10 @@ The biotic and abiotic analysis periods may differ. If they do, RoC still pairs 
 ## Run the workflow
 
 1. Download or clone the repository.
-2. Keep `ROC_v5_RUN.R`, `ROC_v5_DO_NOT_RUN.R`, and `settings_configuration_v5.xlsx` together.
+2. Keep `RUN.R`, `DO_NOT_RUN.R`, and `settings_configuration.xlsx` together.
 3. Place the input workbooks in the configured data folder.
 4. Complete all relevant settings sheets.
-5. Open `ROC_v5_RUN.R` in RStudio and run the complete file.
+5. Open `RUN.R` in RStudio and run the complete file.
 6. Read the console messages and correct any reported input or configuration error.
 7. Inspect the tables and plots in the configured output folder before using the rates.
 
@@ -384,7 +411,7 @@ RoC does not demonstrate:
 
 ### The launcher cannot determine its location
 
-Open `ROC_v5_RUN.R` directly in RStudio and run the complete file, or execute the launcher as a file rather than pasting isolated lines into the console.
+Open `RUN.R` directly in RStudio and run the complete file, or execute the launcher as a file rather than pasting isolated lines into the console.
 
 ### A settings or pipeline file is not found
 
@@ -404,7 +431,7 @@ Two original columns have been mapped to the same operated name, or an operated 
 
 ### An abiotic variable is not found
 
-The value in `Chem_selected_variables` does not exactly match the abiotic column name after column mapping. Correct the name or disable that row.
+The value in `Abio_selected_variables` does not exactly match the abiotic column name after column mapping. Correct the name or disable that row.
 
 ### An abiotic variable cannot be converted to numeric
 
